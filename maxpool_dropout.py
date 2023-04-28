@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 
-from util import load_cifar10, train_model, test_model
+from dataloaders import load_cifar10
+from util import train_model, test_model
 
 device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
 
@@ -20,7 +21,7 @@ class CNN(nn.Module):
         self.layer2 = nn.Sequential(
             nn.Conv2d(in_channels=96, out_channels=128, kernel_size=3),
             nn.ReLU(),
-            nn.Dropout(0,7),
+            nn.Dropout(0.7),
             nn.MaxPool2d(kernel_size=3, stride=2)
         )
         self.layer3 = nn.Sequential(

@@ -3,7 +3,8 @@ import numpy as np
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
-from util import load_cifar10, train_model, test_model
+from dataloaders import load_cifar10
+from util import train_model, test_model
 
 device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
 

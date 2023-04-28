@@ -1,9 +1,41 @@
-import random, torch
+import torch
 import numpy as np
-import torchvision
-import torchvision.transforms as transforms
-from torch.utils import data
-from torch.utils.data.sampler import SubsetRandomSampler
+import matplotlib.pyplot as plt
+
+from torchsummary import summary
+
+
+def has_mps():
+    return torch.backends.mps.is_available()
+
+def device():
+    return torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+
+def imshow(img, title):
+    img = denormalize(img)
+    npimg = img.numpy()
+    fig = plt.figure(figsize=(15, 7))
+    plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    plt.title(title)
+    plt.show()
+
+def show_model_summary(model, input_size, device):
+    print(summary(model, input_size, device=device))
+
+def denormalize(tensor, mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010]):
+    single_img = False
+    if tensor.ndimension() == 3:
+        single_img = True
+        tensor = tensor[None, :, :, :]
+    
+    if not tensor.ndimension() == 4:
+        raise TypeError('tensor should be 4D')
+    
+    mean = torch.FloatTensor(mean).view(1, 3, 1, 1).expand_as(tensor).to(tensor.device)
+    std = torch.FloatTensor(std).view(1, 3, 1, 1).expand_as(tensor).to(tensor.device)
+    ret = tensor.mul(std).add(mean)
+    return ret[0] if single_img else ret
+
 
 def count(output, target):
     with torch.no_grad():
@@ -11,39 +43,6 @@ def count(output, target):
         correct = (predict == target).sum().item()
         return correct
     
-# CIFAR-10
-    
-# Returns data loaders for training, validation, and test data
-def load_cifar10(data_dir, batch_size, random_seed=32, val_size=0.1, shuffle=True, test=False):
-    all_transforms = transforms.Compose([transforms.Resize((32, 32)),
-                                         transforms.ToTensor(),
-                                         transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
-                                                              std=[0.2023, 0.1994, 0.2010])])
-    # Return test loader
-    if test:
-        test_dataset = torchvision.datasets.CIFAR10(root=data_dir, train=False, transform=all_transforms, download=True)
-        test_loader = data.DataLoader(test_dataset, batch_size=batch_size, shuffle=shuffle)
-        return test_loader
-    # Return train and val loaders
-    train_dataset = torchvision.datasets.CIFAR10(root=data_dir, train=True, transform=all_transforms, download=True)
-    val_dataset = torchvision.datasets.CIFAR10(root=data_dir, train=True, transform=all_transforms, download=True)
-
-    num_train = len(train_dataset)
-    indices = list(range(num_train))
-    split = int(np.floor(val_size * num_train))
-
-    if shuffle:
-        np.random.seed(random_seed)
-        np.random.shuffle(indices)
-    
-    train_idx, val_idx = indices[split:], indices[:split]
-    train_sampler = SubsetRandomSampler(train_idx)
-    val_sampler = SubsetRandomSampler(val_idx)
-
-    train_loader = data.DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler)
-    val_loader = data.DataLoader(val_dataset, batch_size=batch_size, sampler=val_sampler)
-
-    return (train_loader, val_loader)
 
 def train_model(model, optimizer, loss_function, train_loader, val_loader, epochs, device):
     history = {}
