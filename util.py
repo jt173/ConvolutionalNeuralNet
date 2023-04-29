@@ -2,9 +2,6 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-from torchsummary import summary
-
-
 def has_mps():
     return torch.backends.mps.is_available()
 
@@ -18,9 +15,6 @@ def imshow(img, title):
     plt.imshow(np.transpose(npimg, (1, 2, 0)))
     plt.title(title)
     plt.show()
-
-def show_model_summary(model, input_size, device):
-    print(summary(model, input_size, device=device))
 
 def denormalize(tensor, mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010]):
     single_img = False
