@@ -1,5 +1,6 @@
 import torch
 import torchvision
+import torchvision.transforms.functional as F
 import numpy as np
 import torchvision.transforms as transforms
 from torch.utils.data.sampler import SubsetRandomSampler
@@ -11,13 +12,17 @@ from util import has_mps, imshow
 # --- Imagenet --- 
 
 
-def imagenet_transforms(is_train=False):
+def imagenet_transforms(cutout=False, is_train=False):
     # Mean and std of train dataset
     mean = np.array([0.4914, 0.4822, 0.4465])
     std = np.array([0.2023, 0.1994, 0.2010])
     transforms_list = []
     # Use data agug only for train data
     if is_train:
+        if cutout:
+            transforms_list.extend([
+                Cutout(0.5, 8)
+            ])
         transforms_list.extend([
             transforms.RandomCrop(64, padding=4),
             transforms.RandomHorizontalFlip()
@@ -26,10 +31,7 @@ def imagenet_transforms(is_train=False):
         transforms.ToTensor(),
         transforms.Normalize(mean, std)
     ])
-    #if is_train:
-    #    transforms_list.extend([
-    #        transforms.RandomErasing(0.25)
-    #    ])
+
     return transforms.Compose(transforms_list)
 
 
@@ -43,11 +45,12 @@ class ImagenetData(object):
         self.num_workers = args.num_workers
         self.train_data_path = args.train_data_path
         self.test_data_path = args.test_data_path
+        self.cutout = args.cutout
         self.load()
 
     def transforms(self):
         # Data transformations
-        train_transform = imagenet_transforms(is_train=True)
+        train_transform = imagenet_transforms(self.cutout, is_train=True)
         test_transform = imagenet_transforms(is_train=False)
         return train_transform, test_transform
     
@@ -101,12 +104,13 @@ class ImagenetData(object):
 
 
 class ImageNetConfig(object):
-    def __init__(self):
+    def __init__(self, cutout=False):
         super(ImageNetConfig, self).__init__()
         self.seed = 1
-        self.batch_size_mps = 128
-        self.batch_size_cpu = 128
+        self.batch_size_mps = 64
+        self.batch_size_cpu = 64
         self.num_workers = 4
+        self.cutout = cutout
 
         self.train_data_path = 'tiny-imagenet-200/new_train'
         self.test_data_path = 'tiny-imagenet-200/new_test'
@@ -117,11 +121,21 @@ class ImageNetConfig(object):
 # --- CIFAR-10 ---
     
 # Returns data loaders for training, validation, and test data
-def load_cifar10(data_dir, batch_size, random_seed=32, val_size=0.1, shuffle=True, test=False):
-    all_transforms = transforms.Compose([transforms.Resize((32, 32)),
-                                         transforms.ToTensor(),
-                                         transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
-                                                              std=[0.2023, 0.1994, 0.2010])])
+def load_cifar10(data_dir, batch_size, random_seed=32, val_size=0.1, shuffle=True, test=False, cutout=False):
+    transforms_list = []
+    if test:
+        transforms_list.extend([transforms.Resize((32, 32)),
+                                transforms.ToTensor(),
+                                transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                                    std=[0.2023, 0.1994, 0.2010])])
+    else:
+        if cutout:
+            transforms_list.extend([Cutout(0.5, 8)])
+        transforms_list.extend([transforms.Resize((32, 32)),
+                                transforms.ToTensor(),
+                                transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                                     std=[0.2023, 0.1994, 0.2010])])
+    all_transforms = transforms.Compose(transforms_list)
     # Return test loader
     if test:
         test_dataset = torchvision.datasets.CIFAR10(root=data_dir, train=False, transform=all_transforms, download=True)
@@ -150,11 +164,21 @@ def load_cifar10(data_dir, batch_size, random_seed=32, val_size=0.1, shuffle=Tru
 
 
 # --- CIFAR-100 ---
-def load_cifar100(data_dir, batch_size, random_seed=32, val_size=0.1, shuffle=True, test=False):
-    all_transforms = transforms.Compose([transforms.Resize((32, 32)),
-                                         transforms.ToTensor(),
-                                         transforms.Normalize(mean=[0.5701, 0.4867, 0.4408],
-                                                              std=[0.2675, 0.2565, 0.2761])])
+def load_cifar100(data_dir, batch_size, random_seed=32, val_size=0.1, shuffle=True, test=False, cutout=False):
+    transforms_list = []
+    if test:
+        transforms_list.extend([transforms.Resize((32, 32)),
+                                transforms.ToTensor(),
+                                transforms.Normalize(mean=[0.5701, 0.4867, 0.4408],
+                                                    std=[0.2675, 0.2565, 0.2761])])
+    else:
+        if cutout:
+            transforms_list.extend([Cutout(0.5, 8)])
+        transforms_list.extend([transforms.Resize((32, 32)),
+                                transforms.ToTensor(),
+                                transforms.Normalize(mean=[0.5701, 0.4867, 0.4408],
+                                                    std=[0.2675, 0.2565, 0.2761])])
+    all_transforms = transforms.Compose(transforms_list)
     # Return test data
     if test:
         test_dataset = torchvision.datasets.CIFAR100(root=data_dir, train=False, transform=all_transforms, download=True)
@@ -185,9 +209,18 @@ def load_cifar100(data_dir, batch_size, random_seed=32, val_size=0.1, shuffle=Tr
 # --- MNIST ---
 
 # Returns data loaders for training, validation, and test data
-def load_mnist(data_dir, batch_size, random_seed=32, val_size=0.1, shuffle=True, test=False):
-    all_transforms = transforms.Compose([transforms.ToTensor(),
-                                         transforms.Normalize((0.1307,), (0.3081))])
+def load_mnist(data_dir, batch_size, random_seed=32, val_size=0.1, shuffle=True, test=False, cutout=False):
+    transforms_list = []
+    if test:
+        transforms_list.extend([transforms.ToTensor(),
+                                transforms.Normalize((0.1307,), (0.3081))])
+    else:
+        if cutout:
+            transforms_list.extend([Cutout(0.5, 8)])
+        transforms_list.extend([transforms.ToTensor(),
+                                transforms.Normalize((0.1307,), (0.3081))])
+    all_transforms = transforms.Compose(transforms_list)
+    
     # Return the test loader
     if test:
         test_dataset = torchvision.datasets.MNIST(root=data_dir, train=False, transform=all_transforms, download=True)
@@ -215,38 +248,31 @@ def load_mnist(data_dir, batch_size, random_seed=32, val_size=0.1, shuffle=True,
     return (train_loader, val_loader)
 
 
+# Cutout Augmentation
 
-def cutout(mask_size, p, cutout_inside, mask_color=(0, 0, 0)):
-    mask_size_half = mask_size // 2
-    offset = 1 if mask_size % 2 == 0 else 0
+def cutout(img, pad_size, replace):
+    img = F.pil_to_tensor(img)
+    _, h, w = img.shape
+    center_h, center_w = torch.randint(high=h, size=(1,)), torch.randint(high=w, size=(1,))
+    low_h, high_h = torch.clamp(center_h-pad_size, 0, h).item(), torch.clamp(center_h+pad_size, 0, h).item()
+    low_w, high_w = torch.clamp(center_w-pad_size, 0, w).item(), torch.clamp(center_w+pad_size, 0, w).item()
+    cutout_img = img.clone()
+    cutout_img[:, low_h:high_h, low_w:high_w] = replace
+    return F.to_pil_image(cutout_img)
 
-    def _cutout(image):
-        image = np.asarray(image).copy()
+class Cutout(torch.nn.Module):
+    def __init__(self, p, pad_size, replace=128):
+        super().__init__()
+        self.p = p
+        self.pad_size = int(pad_size)
+        self.replace = replace
 
-        if np.random.random() > p:
+    def forward(self, image):
+        if torch.rand(1) < self.p:
+            cutout_image = cutout(image, self.pad_size, self.replace)
+            return cutout_image
+        else:
             return image
         
-        h, w = image.shape[:2]
-        
-        if cutout_inside:
-            cxmin, cxmax = mask_size_half, w + offset - mask_size_half
-            cymin, cymax = mask_size_half, h + offset - mask_size_half
-        else:
-            cxmin, cxmax = 0, w + offset
-            cymin, cymax = 0, h + offset
-        
-        cx = np.random.randint(cxmin, cxmax)
-        cy = np.random.randint(cymin, cymax)
-        xmin = cx - mask_size_half
-        ymin = cy - mask_size_half
-        xmax = xmin + mask_size
-        ymax = ymin + mask_size
-        xmin = max(0, xmin)
-        ymin = max(0, ymin)
-        xmax = min(w, xmax)
-        ymax = min(h, ymax)
-
-        image[ymin:ymax, xmin:xmax] = mask_color
-        return image
-
-    return _cutout
+    def __repr__(self):
+        return self.__class__.__name__ + "(p={0}, pad_size={1})".format(self.p, self.pad_size)

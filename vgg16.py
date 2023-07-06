@@ -1,21 +1,21 @@
-import numpy as np
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
 
-from dataloaders import load_cifar10
+from dataloaders import load_cifar10, load_cifar100, load_mnist, ImageNetConfig, ImagenetData
 from util import train_model, test_model
 
 # Device config
 device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
 
 class VGG16(nn.Module):
-    def __init__(self, num_classes, fc=False, maxpool=False, spatial=False, cutout=False):
+    def __init__(self, num_classes, in_channels=3, fc=False, maxpool=False, spatial=False):
         super(VGG16, self).__init__()
 
         # Conv1
         if spatial:
             self.conv1 = nn.Sequential(
-                nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
+                nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1),
                 nn.Dropout2d(0.5),
                 nn.BatchNorm2d(64),
                 nn.ReLU(),
@@ -27,7 +27,7 @@ class VGG16(nn.Module):
         )
         elif maxpool:
             self.conv1 = nn.Sequential(
-                nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
+                nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1),
                 nn.BatchNorm2d(64),
                 nn.ReLU(),
                 nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
@@ -38,7 +38,7 @@ class VGG16(nn.Module):
             )
         else:
             self.conv1 = nn.Sequential(
-                nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
+                nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1),
                 nn.BatchNorm2d(64),
                 nn.ReLU(),
                 nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
@@ -219,14 +219,23 @@ class VGG16(nn.Module):
 
         
         # FC
-        self.fc = nn.Sequential(
-            nn.Dropout(0.5),
-            nn.Linear(512, 4096),
-            nn.ReLU())
-        self.fc1 = nn.Sequential(
-            nn.Dropout(0.5), 
-            nn.Linear(4096, 4096),
-            nn.ReLU())
+        if fc:
+            self.fc = nn.Sequential(
+                nn.Dropout(0.5),
+                nn.Linear(512, 4096),
+                nn.ReLU())
+            self.fc1 = nn.Sequential(
+                nn.Dropout(0.5), 
+                nn.Linear(4096, 4096),
+                nn.ReLU())
+        else:
+            self.fc = nn.Sequential(
+                nn.Linear(512, 4096),
+                nn.ReLU())
+            self.fc1 = nn.Sequential(
+                nn.Linear(4096, 4096),
+                nn.ReLU())
+            
         self.fc2 = nn.Sequential(
             nn.Linear(4096, num_classes))
         
@@ -244,21 +253,64 @@ class VGG16(nn.Module):
         
         return out
     
-# Setting up the model
-num_classes = 10
-num_epochs = 20
-batch_size = 64
-learning_rate = 0.005
 
-# Load data
-train_loader, val_loader = load_cifar10(data_dir='./data', batch_size=batch_size)
-test_loader = load_cifar10(data_dir='./data', batch_size=batch_size, test=True)
+def load_model(device, num_classes, in_channels, dropout_method=None):
+    if dropout_method:
+        if dropout_method == 'fc':
+            model = VGG16(num_classes, in_channels, fc=True).to(device)
+            return model
+        elif dropout_method == 'mp':
+            model = VGG16(num_classes, in_channels, maxpool=True).to(device)
+            return model
+        elif dropout_method == 'sp':
+            model = VGG16(num_classes, in_channels, spatial=True).to(device)
+            return model
+    else:
+        model = VGG16(num_classes, in_channels).to(device)
+        return model
+    
+def main():
+    # Setting up the model
+    num_classes = 200
+    num_epochs = 10
+    batch_size = 64
+    learning_rate = 0.005
+    in_channels = 3
 
-model = VGG16(num_classes).to(device)
+    # Load data
 
-loss_function = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay=0.005, momentum=0.9)
+    cutout = False
 
-history = train_model(model, optimizer, loss_function, train_loader, val_loader, num_epochs, device)
-test_acc = test_model(model, test_loader, device)
-print("Accuracy without dropout: {:.4f}%".format(test_acc))
+    train_loader, val_loader = load_cifar100(data_dir='./data', batch_size=batch_size, cutout=cutout)
+    test_loader = load_cifar100(data_dir='./data', batch_size=batch_size, test=True)
+
+    # Dropout method
+    dropout_method = 'fc'
+    model = load_model(device, num_classes, in_channels, dropout_method)
+
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay=0.005, momentum=0.9)
+
+    history = train_model(model, optimizer, loss_function, train_loader, val_loader, num_epochs, device)
+    test_acc = test_model(model, test_loader, device)
+    print("Accuracy: {:.4f}%".format(test_acc))
+
+
+    # Plotting
+    acc = history['acc']
+    val_acc = history['val_acc']
+
+    epochs = range(1, len(acc) + 1)
+
+    plt.plot(epochs, acc, label='Accuracy')
+    plt.plot(epochs, val_acc, label='Valdiation Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.ylim([50,100])
+    plt.legend(loc='lower right')
+    plt.title("Dropout Classification Accuracy")
+    plt.show()
+
+
+if __name__ == '__main__':
+    main()
